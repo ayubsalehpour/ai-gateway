@@ -4,7 +4,7 @@ from pymongo.errors import DuplicateKeyError
 from app.schemas.users import UserCreate, UserResponse
 from app.services.user_service import UserService
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, require_admin
 from fastapi import Depends
 
 
@@ -40,8 +40,6 @@ def get_my_profile(
     return current_user
 
 
-# @router.get("/", response_model=list[UserResponse])
-#def get_users(
-    current_user: dict = Depends(get_current_user),
-#):
-#    return user_service.get_users()
+@router.get("/", response_model=list[UserResponse])
+def get_users(current_user: dict = Depends(require_admin)):
+    return user_service.get_users()

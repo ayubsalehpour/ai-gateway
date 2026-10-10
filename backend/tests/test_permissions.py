@@ -29,3 +29,20 @@ def test_admin_can_access_admin_dashboard(client):
 
     assert response.status_code == 200
     assert response.json()["admin"] == "test_admin"
+
+
+def test_regular_user_cannot_list_users(client):
+    from app.api.dependencies import get_current_user
+    from app.main import app
+
+    app.dependency_overrides[get_current_user] = lambda: {
+        "_id": "test-user-id",
+        "username": "test_user",
+        "email": "test@example.com",
+        "role": "user",
+    }
+
+    response = client.get("/users/")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin access required"
