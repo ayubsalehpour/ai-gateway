@@ -81,3 +81,103 @@ def test_reusing_idempotency_key_for_different_amount_is_rejected():
         )
 
     assert repository.credit_calls == 1
+
+
+class FakeDebitWalletRepository:
+    def __init__(self, result):
+        self.result = result
+        self.debit_calls = 0
+        self.debit_kwargs = None
+
+    def debit_wallet_transaction(self, **kwargs):
+        self.debit_calls += 1
+        self.debit_kwargs = kwargs
+        return self.result
+
+
+def make_debit_transaction():
+    return {
+        "_id": TRANSACTION_ID,
+        "wallet_id": WALLET_ID,
+        "user_id": USER_ID,
+        "type": "debit",
+        "amount_toman": 30_000,
+        "balance_after": 70_000,
+        "description": "API usage",
+        "reference": None,
+        "idempotency_key": "debit-service-test-0001",
+    }
+
+
+def test_debit_wallet_success():
+    transaction = make_debit_transaction()
+    wallet = {
+        "id": WALLET_ID,
+        "user_id": USER_ID,
+        "balance_toman": 70_000,
+    }
+
+    service = WalletService()
+    repository = FakeDebitWalletRepository(
+        {
+            "duplicate": False,
+            "wallet": wallet,
+            "transaction": {
+                **transaction,
+                "id": TRANSACTION_ID,
+            },
+        }
+    )
+    service.repository = repository
+
+    result = service.debit_wallet(
+        user_id=USER_ID,
+        amount_toman=30_000,
+        description="API usage",
+        idempotency_key="debit-service-test-0001",
+    )
+
+    assert repository.debit_calls == 1
+    assert repository.debit_kwargs["amount_toman"] == 30_000
+    assert result["wallet"]["balance_toman"] == 70_000
+    assert result["transaction"]["type"] == "debit"
+
+
+def test_debit_wallet_rejects_reused_key_for_different_request():
+    transaction = make_debit_transaction()
+
+    service = WalletService()
+    repository = FakeDebitWalletRepository(
+        {
+            "duplicate": True,
+            "transaction": transaction,
+        }
+    )
+    service.repository = repository
+
+    with pytest.raises(ValueError, match="Idempotency key"):
+        service.debit_wallet(
+            user_id=USER_ID,
+            amount_toman=50_000,
+            description="API usage",
+            idempotency_key="debit-service-test-0001",
+        )
+
+    assert repository.debit_calls == 1
+
+
+@pytest.mark.parametrize("amount", [0, -1, 1.5, True, "100"])
+def test_debit_wallet_rejects_invalid_amount(amount):
+    service = WalletService()
+    repository = FakeDebitWalletRepository(None)
+    service.repository = repository
+
+    with pytest.raises(ValueError, match="Amount"):
+        service.debit_wallet(
+            user_id=USER_ID,
+            amount_toman=amount,
+            description="API usage",
+            idempotency_key="debit-service-test-0002",
+        )
+
+    assert repository.debit_calls == 0

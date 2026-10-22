@@ -38,3 +38,16 @@ class AdminWalletCreditRequest(BaseModel):
 class AdminWalletCreditResponse(BaseModel):
     wallet: WalletResponse
     transaction: WalletTransactionResponse
+
+
+
+class WalletDebitRequest(BaseModel):
+    amount_toman: int = Field(strict=True, gt=0, le=100_000_000)
+    description: str = Field(min_length=3, max_length=250)
+    reference: str | None = Field(default=None, max_length=100)
+    idempotency_key: str = Field(min_length=16, max_length=128)
+
+
+class WalletDebitResponse(BaseModel):
+    wallet: WalletResponse
+    transaction: WalletTransactionResponse

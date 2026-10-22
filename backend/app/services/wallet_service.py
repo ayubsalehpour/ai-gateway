@@ -130,3 +130,76 @@ class WalletService:
             }
 
         return result
+
+    def debit_wallet(
+        self,
+        user_id: str,
+        amount_toman: int,
+        description: str,
+        idempotency_key: str,
+        reference: str | None = None,
+    ):
+        if not ObjectId.is_valid(user_id):
+            raise ValueError("Invalid user ID")
+
+        if isinstance(amount_toman, bool) or not isinstance(amount_toman, int):
+            raise ValueError("Amount must be an integer")
+
+        if amount_toman <= 0:
+            raise ValueError("Amount must be greater than zero")
+
+        if not description or not description.strip():
+            raise ValueError("Description is required")
+
+        if not idempotency_key or not idempotency_key.strip():
+            raise ValueError("Idempotency key is required")
+
+        description = description.strip()
+        idempotency_key = idempotency_key.strip()
+
+        result = self.repository.debit_wallet_transaction(
+            user_id=user_id,
+            amount_toman=amount_toman,
+            description=description,
+            idempotency_key=idempotency_key,
+            reference=reference,
+        )
+
+        if result is None:
+            raise LookupError(
+                "Wallet not found or insufficient balance"
+            )
+
+        if result.get("duplicate"):
+            transaction = result["transaction"]
+
+            same_request = (
+                transaction.get("user_id") == user_id
+                and transaction.get("type") == "debit"
+                and transaction.get("amount_toman") == amount_toman
+                and transaction.get("description") == description
+                and transaction.get("reference") == reference
+            )
+
+            if not same_request:
+                raise ValueError(
+                    "Idempotency key has already been used "
+                    "for a different request"
+                )
+
+            wallet = self.repository.get_by_user_id(user_id)
+
+            if wallet is None:
+                raise LookupError("Wallet not found")
+
+            wallet["id"] = str(wallet.pop("_id"))
+
+            if "_id" in transaction:
+                transaction["id"] = str(transaction.pop("_id"))
+
+            return {
+                "wallet": wallet,
+                "transaction": transaction,
+            }
+
+        return result

@@ -2,8 +2,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.dependencies import get_current_user
-from app.schemas.wallet import WalletResponse, WalletTransactionResponse
+from app.schemas.wallet import (
+    WalletDebitRequest,
+    WalletDebitResponse,
+    WalletResponse,
+    WalletTransactionResponse,
+)
 from app.services.wallet_service import WalletService
+
 
 
 router = APIRouter(prefix="/wallet", tags=["Wallet"])
@@ -37,3 +43,35 @@ def get_my_wallet_transactions(
         limit=limit,
         skip=skip,
     )
+
+
+
+@router.post(
+    "/debit",
+    response_model=WalletDebitResponse,
+    status_code=status.HTTP_200_OK,
+)
+def debit_my_wallet(
+    payload: WalletDebitRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return wallet_service.debit_wallet(
+            user_id=current_user["_id"],
+            amount_toman=payload.amount_toman,
+            description=payload.description,
+            idempotency_key=payload.idempotency_key,
+            reference=payload.reference,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

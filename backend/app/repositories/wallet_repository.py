@@ -92,8 +92,115 @@ class WalletRepository:
             return_document=ReturnDocument.AFTER,
         )
 
-    
-   
+
+    def debit_balance(self, user_id: str, amount_toman: int):
+        if isinstance(amount_toman, bool) or not isinstance(amount_toman, int):
+            raise ValueError("Amount must be an integer")
+
+        if amount_toman <= 0:
+            raise ValueError("Amount must be greater than zero")
+
+        now = datetime.now(timezone.utc)
+
+        return wallets_collection.find_one_and_update(
+            {
+                "user_id": user_id,
+                "balance_toman": {"$gte": amount_toman},
+            },
+            {
+                "$inc": {"balance_toman": -amount_toman},
+                "$set": {"updated_at": now},
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+
+
+    def debit_wallet_transaction(
+        self,
+        user_id: str,
+        amount_toman: int,
+        description: str,
+        idempotency_key: str,
+        reference: str | None = None,
+    ):
+        if isinstance(amount_toman, bool) or not isinstance(amount_toman, int):
+            raise ValueError("Amount must be an integer")
+
+        if amount_toman <= 0:
+            raise ValueError("Amount must be greater than zero")
+
+        now = datetime.now(timezone.utc)
+
+        try:
+            with client.start_session() as session:
+                with session.start_transaction():
+                    existing_transaction = wallet_transactions_collection.find_one(
+                        {"idempotency_key": idempotency_key},
+                        session=session,
+                    )
+
+                    if existing_transaction is not None:
+                        return {
+                            "duplicate": True,
+                            "transaction": existing_transaction,
+                        }
+
+                    wallet = wallets_collection.find_one_and_update(
+                        {
+                            "user_id": user_id,
+                            "balance_toman": {"$gte": amount_toman},
+                        },
+                        {
+                            "$inc": {"balance_toman": -amount_toman},
+                            "$set": {"updated_at": now},
+                        },
+                        return_document=ReturnDocument.AFTER,
+                        session=session,
+                    )
+
+                    if wallet is None:
+                        return None
+
+                    transaction_data = {
+                        "wallet_id": str(wallet["_id"]),
+                        "user_id": user_id,
+                        "type": "debit",
+                        "amount_toman": amount_toman,
+                        "balance_after": wallet["balance_toman"],
+                        "description": description,
+                        "reference": reference,
+                        "idempotency_key": idempotency_key,
+                        "created_at": now,
+                    }
+
+                    result = wallet_transactions_collection.insert_one(
+                        transaction_data,
+                        session=session,
+                    )
+
+                    transaction_data["id"] = str(result.inserted_id)
+                    wallet["id"] = str(wallet.pop("_id"))
+
+                    return {
+                        "duplicate": False,
+                        "wallet": wallet,
+                        "transaction": transaction_data,
+                    }
+
+        except DuplicateKeyError:
+            # A duplicate idempotency key aborts the transaction.
+            existing_transaction = wallet_transactions_collection.find_one(
+                {"idempotency_key": idempotency_key}
+            )
+
+            if existing_transaction is None:
+                raise
+
+            return {
+                "duplicate": True,
+                "transaction": existing_transaction,
+            }
+
 
     def credit_wallet_transaction(
         self,
