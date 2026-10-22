@@ -10,12 +10,17 @@ from app.repositories.user_repository import UserRepository
 from app.api.auth import router as auth_router
 from app.api.private import router as private_router
 from app.api.admin import router as admin_router
+from app.repositories.wallet_repository import WalletRepository
+from app.api.wallet import router as wallet_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     repository = UserRepository()
     repository.create_email_index()
+
+    wallet_repository = WalletRepository()
+    wallet_repository.create_indexes()
 
     yield
 
@@ -33,3 +38,4 @@ app.include_router(users_router)
 app.include_router(auth_router)
 app.include_router(private_router)
 app.include_router(admin_router)
+app.include_router(wallet_router)

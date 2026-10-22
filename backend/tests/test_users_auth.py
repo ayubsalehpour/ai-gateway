@@ -4,6 +4,7 @@ from bson import ObjectId
 from app.api.users import user_service
 from app.api.auth import auth_service
 from app.core.security import hash_password
+from app.services.user_service import UserService
 
 
 def test_register_user(client, monkeypatch):
@@ -122,3 +123,49 @@ def test_login_wrong_password_returns_401(
     )
 
     assert response.status_code == 401
+
+
+def test_register_user_creates_wallet(client, monkeypatch):
+    from bson import ObjectId
+    from app.api.users import user_service
+
+    created_user_id = ObjectId()
+    wallet_calls = []
+
+    monkeypatch.setattr(
+        user_service.repository,
+        "get_by_email",
+        lambda email: None,
+    )
+
+    def fake_create(user_data):
+        return {
+            "_id": created_user_id,
+            "username": user_data["username"],
+            "email": user_data["email"],
+            "role": user_data["role"],
+        }
+
+    monkeypatch.setattr(
+        user_service.repository,
+        "create",
+        fake_create,
+    )
+
+    monkeypatch.setattr(
+        user_service.wallet_service,
+        "create_wallet",
+        lambda user_id: wallet_calls.append(user_id),
+    )
+
+    response = client.post(
+        "/users/",
+        json={
+            "username": "wallet_test_user",
+            "email": "wallet_test@example.com",
+            "password": "SecurePass123!",
+        },
+    )
+
+    assert response.status_code == 201
+    assert wallet_calls == [str(created_user_id)]
