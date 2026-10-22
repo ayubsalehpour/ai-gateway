@@ -14,7 +14,7 @@ def test_register_user(client, monkeypatch):
         lambda email: None,
     )
 
-    def fake_create(user_data):
+    def fake_create(user_data, session=None):
         return {
             "_id": ObjectId(),
             "username": user_data["username"],
@@ -138,7 +138,7 @@ def test_register_user_creates_wallet(client, monkeypatch):
         lambda email: None,
     )
 
-    def fake_create(user_data):
+    def fake_create(user_data, session=None):
         return {
             "_id": created_user_id,
             "username": user_data["username"],
@@ -155,7 +155,7 @@ def test_register_user_creates_wallet(client, monkeypatch):
     monkeypatch.setattr(
         user_service.wallet_service,
         "create_wallet",
-        lambda user_id: wallet_calls.append(user_id),
+        lambda user_id, session=None: wallet_calls.append(user_id),
     )
 
     response = client.post(
@@ -169,3 +169,79 @@ def test_register_user_creates_wallet(client, monkeypatch):
 
     assert response.status_code == 201
     assert wallet_calls == [str(created_user_id)]
+
+
+
+
+def test_register_rolls_back_when_wallet_creation_fails(monkeypatch):
+    user_service_instance = UserService()
+    created_user_id = ObjectId()
+    events = []
+
+    class FakeTransaction:
+        def __enter__(self):
+            events.append("transaction_started")
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            if exc_type:
+                events.append("transaction_aborted")
+            else:
+                events.append("transaction_committed")
+            return False
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def start_transaction(self):
+            return FakeTransaction()
+
+    class FakeClient:
+        def start_session(self):
+            return FakeSession()
+
+    monkeypatch.setattr(
+        "app.services.user_service.client",
+        FakeClient(),
+    )
+
+    monkeypatch.setattr(
+        user_service_instance.repository,
+        "create",
+        lambda user_data, session=None: {
+            "_id": created_user_id,
+            "username": user_data["username"],
+            "email": user_data["email"],
+            "role": user_data["role"],
+        },
+    )
+
+    def fail_wallet_creation(user_id, session=None):
+        events.append("wallet_creation_failed")
+        raise RuntimeError("Wallet creation failed")
+
+    monkeypatch.setattr(
+        user_service_instance.wallet_service,
+        "create_wallet",
+        fail_wallet_creation,
+    )
+
+    try:
+        user_service_instance.create_user({
+            "username": "rollback_user",
+            "email": "rollback@example.com",
+            "password": "SecurePass123!",
+        })
+    except RuntimeError as exc:
+        assert str(exc) == "Wallet creation failed"
+    else:
+        raise AssertionError("Expected wallet creation to fail")
+
+    assert events == [
+        "transaction_started",
+        "wallet_creation_failed",
+        "transaction_aborted",
+    ]

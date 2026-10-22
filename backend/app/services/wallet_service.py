@@ -8,11 +8,14 @@ class WalletService:
     def __init__(self):
         self.repository = WalletRepository()
 
-    def create_wallet(self, user_id: str):
+    def create_wallet(self, user_id: str, session=None):
         if not ObjectId.is_valid(user_id):
             raise ValueError("Invalid user ID")
 
-        wallet = self.repository.create_wallet(user_id)
+        wallet = self.repository.create_wallet(
+            user_id,
+            session=session,
+        )
 
         if wallet is None:
             raise RuntimeError("Failed to create or retrieve wallet")

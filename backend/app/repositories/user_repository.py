@@ -3,12 +3,17 @@ from bson import ObjectId
 
 
 class UserRepository:
-    def create(self, user_data: dict):
-        result = users_collection.insert_one(user_data)
+    def create(self, user_data: dict, session=None):
+        result = users_collection.insert_one(
+            user_data,
+            session=session,
+        )
 
         return users_collection.find_one(
-            {"_id": result.inserted_id}
+            {"_id": result.inserted_id},
+            session=session,
         )
+
 
     def get_all(self):
         return list(

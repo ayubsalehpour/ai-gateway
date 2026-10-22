@@ -11,7 +11,7 @@ from app.core.database import (
 
 
 class WalletRepository:
-    def create_wallet(self, user_id: str):
+    def create_wallet(self, user_id: str, session=None):
         now = datetime.now(timezone.utc)
 
         wallet = {
@@ -22,11 +22,15 @@ class WalletRepository:
         }
 
         try:
-            wallets_collection.insert_one(wallet)
+            wallets_collection.insert_one(wallet, session=session)
         except DuplicateKeyError:
             pass
 
-        return wallets_collection.find_one({"user_id": user_id})
+        return wallets_collection.find_one(
+            {"user_id": user_id},
+            session=session,
+        )
+
 
     def get_by_user_id(self, user_id: str):
         return wallets_collection.find_one({"user_id": user_id})
