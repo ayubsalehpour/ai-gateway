@@ -12,6 +12,7 @@ from app.core.database import (
     wallet_transactions_collection,
     usage_records_collection,
 )
+from app.services.billing_exceptions import SettlementReconciliationRequired
 
 
 class BillingRepository:
@@ -289,7 +290,7 @@ class BillingRepository:
                 reserved_amount = reservation["amount_toman"]
 
                 if actual_cost_toman > reserved_amount:
-                    raise ValueError(
+                    raise SettlementReconciliationRequired(
                         "Actual cost exceeds reserved amount"
                     )
 
