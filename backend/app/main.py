@@ -16,6 +16,7 @@ from app.repositories.billing_repository import BillingRepository
 from app.api.gateway import router as gateway_router
 from app.repositories.gateway_request_repository import GatewayRequestRepository
 from app.repositories.pricing_repository import PricingRepository
+from app.api.reconciliation import router as reconciliation_router
 
 
 @asynccontextmanager
@@ -53,3 +54,4 @@ app.include_router(private_router)
 app.include_router(admin_router)
 app.include_router(wallet_router)
 app.include_router(gateway_router)
+app.include_router(reconciliation_router)
